@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>drop-vet · history</title>
+<style>
+:root{--ground:#f7f7f5;--surface:#fff;--ink:#1b1d1c;--muted:#5b625f;--faint:#8a918e;--rule:#dfe2e0;--sig:#0f766e;--link:#0f766e;
+--ok:#166534;--tok:#dcfce7;--info:#1e40af;--tinfo:#dbeafe;--warn:#92400e;--twarn:#fef3c7;--err:#991b1b;--terr:#fee2e2}
+@media (prefers-color-scheme:dark){:root{--ground:#121413;--surface:#1b1e1d;--ink:#e8ebe9;--muted:#a3aba7;--faint:#76807b;--rule:#2c3130;--sig:#2dd4bf;--link:#5eead4;
+--ok:#86efac;--tok:#14301f;--info:#93c5fd;--tinfo:#172a4a;--warn:#fcd34d;--twarn:#3a2d0c;--err:#fca5a5;--terr:#3b1515}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px;margin:0 auto;padding:28px 20px 40px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13.5px;margin:0 0 22px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:10px 14px;min-width:110px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.bar button{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:var(--sig);color:var(--ground);border-color:var(--sig)}
+.bar input{font:inherit;font-size:13px;flex:1;min-width:180px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:8px;padding:5px 10px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;border-bottom:1px solid var(--rule);padding:6px 8px}
+td{border-bottom:1px solid var(--rule);padding:7px 8px;vertical-align:top}
+td.n{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:var(--muted);white-space:nowrap}
+td.name{word-break:break-all}
+a.dl{font-size:12px;font-weight:600;color:var(--link);margin-left:6px;white-space:nowrap}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 9px}
+.v-ready{background:var(--tok);color:var(--ok)}
+.v-unverified{background:var(--tinfo);color:var(--info)}
+.v-sensitive{background:var(--twarn);color:var(--warn)}
+.v-held,.v-rejected{background:var(--terr);color:var(--err)}
+.why{font-size:12px;color:var(--muted)}
+.warn{background:var(--twarn);color:var(--warn);border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:13.5px}
+.empty{color:var(--faint);padding:30px 0;text-align:center}
+.foot{margin-top:28px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;color:var(--faint)}
+@media (max-width:700px){.hide-s{display:none}}
+</style>
+</head>
+<body>
+<script type="application/json" id="data">__DATA__</script>
+<div class="wrap">
+  <h1>drop-vet history</h1>
+  <p class="sub">Every file dropped from the Mac, and what the intake decided. One log: the intake ledger. Only fully scanned Ready files can be downloaded.</p>
+  <div id="sigwarn" class="warn" hidden></div>
+  <div class="stats" id="stats"></div>
+  <div class="bar"><span id="bar" style="display:contents"></span><input id="q" placeholder="Search file names"></div>
+  <table>
+    <thead><tr><th>Received</th><th>File</th><th>Result</th><th class="hide-s">Type</th><th class="hide-s">Size</th><th>Why</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div id="empty" class="empty" hidden>No transfers match.</div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const LABEL = {ready: "Ready", unverified: "Ready, not checked for personal data", sensitive: "Personal (no backup)", held: "Held (key or secret)", rejected: "Rejected"};
+const WHY = {malware: "virus detected", pdf_active: "PDF has scripts or attachments", denied_extension: "file type not allowed",
+  disallowed_type: "file type not allowed", archive_member_denied: "archive contains a blocked file", encrypted_archive: "encrypted archive",
+  zip_bomb: "archive expands too far", bad_archive: "damaged archive", office_macro: "Office file with macros", symlink: "link, not a file",
+  special_file: "not a regular file", too_large: "over 200 MB", scan_error: "scan failed, held to be safe", not_scanned: "not scanned, held to be safe",
+  incomplete_upload: "upload never finished", image_not_text_scanned: "image, contents not read", no_text_layer: "scanned PDF, no text to check",
+  archive_member_not_text_scanned: "archive has files that couldn't be read", extraction_failed: "text could not be fully extracted",
+  text_budget_exceeded: "too much text to check", no_sensitive_store: "personal data, and no sensitive store is configured"};
+let state = JSON.parse(document.getElementById("data").textContent), filter = "all", q = "";
+const kind = r => r.verdict === "ready" ? (r.tier === "normal" ? "ready" : r.tier) : r.verdict;
+const size = n => n == null ? "" : n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB";
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+function render() {
+  const items = state.items;
+  const counts = {all: items.length};
+  items.forEach(r => counts[kind(r)] = (counts[kind(r)] || 0) + 1);
+  const stats = document.getElementById("stats"); stats.replaceChildren();
+  [["all", "Total"], ["ready", "Ready"], ["unverified", "Not checked"], ["sensitive", "Personal"], ["held", "Held"], ["rejected", "Rejected"]].forEach(([k, l]) => {
+    const s = el("div", "stat"); s.append(el("b", null, counts[k] || 0), el("span", null, l)); stats.append(s); });
+  const bar = document.getElementById("bar"); bar.replaceChildren();
+  ["all", "ready", "unverified", "sensitive", "held", "rejected"].forEach(k => {
+    const b = el("button", null, {all: "All", ready: "Ready", unverified: "Not checked", sensitive: "Personal", held: "Held", rejected: "Rejected"}[k]);
+    b.setAttribute("aria-pressed", filter === k); b.onclick = () => { filter = k; render(); }; bar.append(b); });
+  const w = document.getElementById("sigwarn");
+  const age = state.sigs_age_hours;
+  w.hidden = !(age == null || age > 72);
+  w.textContent = "Virus definitions are " + (age == null ? "missing" : Math.round(age / 24) + " days old") + ". New drops wait unscanned until they update.";
+  document.getElementById("foot").textContent = "Virus definitions updated " + (age == null ? "never" : age + " h ago") + " · page refreshed " + state.generated + " · auto-refreshes every 30 s";
+  draw();
+}
+function draw() {
+  const tb = document.getElementById("rows"); tb.replaceChildren();
+  const shown = state.items.filter(r => (filter === "all" || kind(r) === filter) && (!q || (r.name || "").toLowerCase().includes(q)));
+  shown.forEach(r => {
+    const tr = el("tr"), k = kind(r);
+    tr.append(el("td", "n", (r.received_at || "").replace("T", " ").slice(0, 16)));
+    const nm = el("td", "name", r.name);
+    if (r.dl) { const a = el("a", "dl", "Download"); a.href = "file/" + r.id; a.setAttribute("download", ""); nm.append(" ", a); }
+    tr.append(nm);
+    const v = el("td"); v.append(el("span", "pill v-" + k, LABEL[k] || k)); tr.append(v);
+    tr.append(el("td", "hide-s", r.category || r.mime || ""));
+    tr.append(el("td", "n hide-s", size(r.size)));
+    const why = [...(r.reasons || []).map(x => WHY[x] || x), ...(r.secrets || []).map(x => "contains " + x), ...(r.pii || []).map(x => "contains " + x.replace("_", " "))];
+    tr.append(el("td", "why", why.join(" · ")));
+    tb.append(tr);
+  });
+  document.getElementById("empty").hidden = shown.length > 0;
+}
+document.getElementById("q").oninput = e => { q = e.target.value.toLowerCase(); draw(); };
+render();
+setInterval(async () => { try { state = await (await fetch("api/log.json", {cache: "no-store"})).json(); render(); } catch (e) {} }, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+[Unit]
+Description=drop-vet intake - quarantine, sandboxed scan, tiered release
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.config/drop-vet/env
+ExecStart=%h/.local/bin/drop-vet intake
+TimeoutStartSec=45min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# The drop root, plus the sensitive store if you set DROP_VET_SENSITIVE_DIR (the leading "-" tolerates
+# it being absent, e.g. an encrypted volume that is not mounted; the intake then fails closed).
+ReadWritePaths=%h/drop-vet

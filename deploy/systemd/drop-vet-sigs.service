@@ -1,0 +1,15 @@
+[Unit]
+Description=drop-vet signatures - unprivileged ClamAV update, then purge old rejects and release waiting drops
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.config/drop-vet/env
+ExecStartPre=/usr/bin/mkdir -p %h/.clamtk/db %h/.local/state/drop-vet
+ExecStartPre=/usr/bin/cp %h/.config/drop-vet/freshclam.conf /tmp/freshclam.conf
+ExecStart=/usr/bin/freshclam --config-file=/tmp/freshclam.conf
+ExecStartPost=/usr/bin/touch %h/.local/state/drop-vet/sigs-ok
+ExecStartPost=%h/.local/bin/drop-vet purge
+ExecStartPost=/usr/bin/systemctl --user start --no-block drop-vet-intake.service
+TimeoutStartSec=30min
+NoNewPrivileges=yes
+PrivateTmp=yes

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drop-vet"
+version = "1.0.0"
+description = "Drag a file onto a Mac window; a Linux box quarantines it, scans it in a sandbox, and tiers it before anything (or anyone) uses it."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [{ name = "Ryan Hill" }]
+keywords = ["quarantine", "clamav", "bubblewrap", "tailscale", "file-transfer", "ai-agents"]
+classifiers = [
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "ruff>=0.5", "hatchling>=1.25"]
+
+[project.scripts]
+drop-vet = "drop_vet.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rh-pro-git/drop-vet"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drop_vet"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF012", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

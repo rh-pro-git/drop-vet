@@ -1,0 +1,16 @@
+[Unit]
+Description=drop-vet history page - read-only view of the ledger with gated downloads (loopback only)
+
+[Service]
+EnvironmentFile=-%h/.config/drop-vet/env
+ExecStart=%h/.local/bin/drop-vet serve
+Restart=on-failure
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# Hide everything the page must never serve. Add your DROP_VET_SENSITIVE_DIR here too.
+InaccessiblePaths=-%h/drop-vet/unverified -%h/drop-vet/held -%h/drop-vet/rejected -%h/drop-vet/landing -%h/drop-vet/quarantine
+
+[Install]
+WantedBy=default.target

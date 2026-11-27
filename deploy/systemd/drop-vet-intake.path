@@ -1,0 +1,9 @@
+[Unit]
+Description=drop-vet - run the intake when a finished drop is renamed into landing/
+
+[Path]
+PathChanged=%h/drop-vet/landing
+Unit=drop-vet-intake.service
+
+[Install]
+WantedBy=default.target
