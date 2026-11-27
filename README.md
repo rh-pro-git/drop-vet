@@ -48,7 +48,9 @@ deploy/install.sh
 [.env.example](.env.example), fetches virus definitions, and starts the watcher, the daily
 definitions timer and the history page on `http://127.0.0.1:8750/`.
 
-On the Mac (needs the Xcode command line tools and an SSH alias for the server in `~/.ssh/config`):
+On the Mac (needs the Xcode command line tools and an SSH alias for the server in `~/.ssh/config`;
+[docs/networking.md](docs/networking.md) shows how to set that up with Tailscale, on a home network,
+over your own VPN, or over the internet):
 
 ```sh
 cd drop-vet/mac && ./build.sh
@@ -61,6 +63,18 @@ verdict. Double-click or right-click the window (or press ⌘L) to open the hist
 
 Without a Mac, anything that can `scp` a directory into `landing/.part-<id>/` and then rename it to
 `landing/drop-<id>` works the same way.
+
+## Networking
+
+drop-vet does not depend on any particular network. It needs SSH from the Mac to the server, and a
+way for you to reach a history page that deliberately listens on loopback only.
+
+| Setup | Good for | Guide |
+|---|---|---|
+| **Tailscale** (recommended) | works anywhere, nothing exposed to the internet, page via `tailscale serve`, access limited with grants | [A](docs/networking.md#a-tailscale-recommended) |
+| **Home network only** | no new software; page through an SSH tunnel | [B](docs/networking.md#b-same-home-network-only) |
+| **Your own VPN (WireGuard)** | you already run one | [C](docs/networking.md#c-your-own-vpn-wireguard) |
+| **SSH open to the internet** | port forwarding only; needs key-only SSH, fail2ban, and a login in front of the page | [D](docs/networking.md#d-ssh-open-to-the-internet) |
 
 ## Configuration
 
@@ -128,15 +142,17 @@ content as data, never as instructions.
 - **Personal-data detection is regex-based.** It misses free-form personal content. Images are not
   OCR'd, which is why they land in `unverified`, not `ready`.
 - **The history page has no login.** Keep it on loopback and put it behind something that
-  authenticates (a tailnet, a VPN, a reverse proxy with auth).
+  controls access (a tailnet with grants, a VPN, an SSH tunnel, or a reverse proxy with a login). See
+  [docs/networking.md](docs/networking.md).
 - **`sensitive` is only as safe as the directory you point it at.** drop-vet does not encrypt; it
   refuses to release sensitive files if the directory is missing.
 - **Memory:** archive members and up to 50 MB of extracted text per file are held in memory, and
   downloads are buffered whole. That is fine at the 200 MB per-file cap.
 - **Partial batches:** if something fails mid-batch, files already placed stay placed and logged;
   the rest stay in quarantine for a manual retry.
-- **The Mac app** uses whatever SSH key your alias offers. Restrict that key on the server (for
-  example with `rrsync`) if you want a compromised laptop to be able to drop files and nothing else.
+- **The Mac app** uses whatever SSH key your alias offers. Give drop-vet its own key and restrict it on
+  the server ([how](docs/networking.md#restricting-the-macs-ssh-key-any-setup)); a ready-made
+  forced-command wrapper is not included yet.
 
 ## Development
 
