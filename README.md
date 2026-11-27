@@ -61,8 +61,11 @@ defaults write dev.drop-vet.app HistoryURL https://myserver.example:8750/
 `build.sh` turns `mac/icon.png` into the app icon. Drop a file on the window. It says "Sent ✓", and a few seconds later the history page shows the
 verdict. Double-click or right-click the window (or press ⌘L) to open the history page.
 
-Without a Mac, anything that can `scp` a directory into `landing/.part-<id>/` and then rename it to
-`landing/drop-<id>` works the same way.
+Without a Mac, anything that can run `drop-vet put <id> <base64url path> < file` once per file and
+then `drop-vet done <id>` over SSH works the same way.
+
+Recommended next: give the app a drop-only key
+([how](docs/networking.md#restricting-the-macs-ssh-key-any-setup-recommended)).
 
 ## Networking
 
@@ -94,8 +97,8 @@ edit the paths in `deploy/systemd/` to match before running `install.sh`.
 | `DROP_VET_HOST` / `DROP_VET_PORT` | `127.0.0.1` / `8750` | History page bind address. Publish it through your own reverse proxy. |
 
 Mac app settings (`defaults write dev.drop-vet.app <key> <value>`): `SSHHost` (default `drop-vet`),
-`RemoteRoot` (default `drop-vet`, relative to the remote home; no spaces), `HistoryURL` (unset = the
-history shortcut just beeps).
+`RemoteCommand` (default `.local/bin/drop-vet`, ignored when the key has a forced command), and
+`HistoryURL` (unset = the history shortcut just beeps).
 
 ## What it checks
 
@@ -150,9 +153,10 @@ content as data, never as instructions.
   downloads are buffered whole. That is fine at the 200 MB per-file cap.
 - **Partial batches:** if something fails mid-batch, files already placed stay placed and logged;
   the rest stay in quarantine for a manual retry.
-- **The Mac app** uses whatever SSH key your alias offers. Give drop-vet its own key and restrict it on
-  the server ([how](docs/networking.md#restricting-the-macs-ssh-key-any-setup)); a ready-made
-  forced-command wrapper is not included yet.
+- **The Mac app's key:** with an everyday SSH key, a compromised laptop has a shell on the server.
+  Use the drop-only key and the `drop-vet ssh-gate` forced command
+  ([setup](docs/networking.md#restricting-the-macs-ssh-key-any-setup-recommended)). Then that key can
+  create new files in one upload directory and nothing else.
 
 ## Development
 

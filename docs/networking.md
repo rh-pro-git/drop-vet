@@ -140,14 +140,53 @@ constantly. Only do this with the hardening below.
      plus a [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)
      policy, which opens no inbound port at all.
 
-## Restricting the Mac's SSH key (any setup)
+## Restricting the Mac's SSH key (any setup, recommended)
 
-The app uses whatever key your SSH alias offers. If that is your everyday login key, a compromised
-laptop has a full shell on the server. To limit the damage, give drop-vet its own key
-(`IdentityFile` in the alias) and, on the server, put `restrict` plus a forced command on that key in
-`~/.ssh/authorized_keys` that allows only what the app runs: `mkdir` and `mv` under
-`landing/`, and `scp` uploads into `landing/.part-*`. See `AUTHORIZED_KEYS FILE FORMAT` in
-[sshd(8)](https://man.openbsd.org/sshd.8). A ready-made wrapper is planned and not yet included.
+By default the app uses whatever key your SSH alias offers. If that is your everyday login key, a
+stolen or compromised laptop has a full shell on the server. drop-vet ships a gatekeeper so the app can
+use a key that **can only drop files**:
+
+1. **On the Mac,** make a key just for drop-vet. It has no passphrase, because the app runs
+   unattended; the server-side limits are what protect it.
+   ```sh
+   ssh-keygen -t ed25519 -N "" -C drop-vet -f ~/.ssh/id_dropvet
+   ```
+2. **On the server,** add one line to `~/.ssh/authorized_keys` (one line, shown wrapped):
+   ```
+   restrict,from="<your Mac's address>",command="DROP_VET_ROOT=$HOME/drop-vet $HOME/.local/bin/drop-vet ssh-gate"
+     ssh-ed25519 AAAA...contents of id_dropvet.pub... drop-vet
+   ```
+   - `restrict` turns off shells, port forwarding, agent forwarding and X11
+     ([`authorized_keys` options](https://man.openbsd.org/sshd.8#AUTHORIZED_KEYS_FILE_FORMAT)).
+   - `from=` accepts the key only from your Mac's address. With Tailscale, list both its `100.x`
+     address and its `fd7a:` IPv6 address from `tailscale status`.
+   - `command=` makes every connection run `drop-vet ssh-gate`, whatever the client asked for.
+3. **On the Mac,** add an alias that offers only that key, and point the app at it:
+   ```
+   Host myserver-drop
+       HostName myserver
+       User you
+       IdentityFile ~/.ssh/id_dropvet
+       IdentitiesOnly yes
+   ```
+   ```sh
+   defaults write dev.drop-vet.app SSHHost myserver-drop
+   ```
+
+The gatekeeper allows exactly two requests: `drop-vet put <id> <path>`, which streams one new file
+into `landing/.part-<id>/`, and `drop-vet done <id>`, which hands the upload to the intake. It refuses
+everything else: shells, other commands, `scp`, `sftp`, paths with `..` or a leading `/`, symlinked
+directories, overwriting an existing file, more than 1,000 files or 2 GB per drop, and files over
+200 MB. Check it from the Mac:
+
+```sh
+ssh myserver-drop                        # drop-vet: refused: only 'drop-vet put ...' and 'drop-vet done ...'
+scp somefile myserver-drop:/tmp/         # Connection closed
+```
+
+The same `put`/`done` commands also run directly with an unrestricted key, so the app works either
+way. If drop-vet isn't at `~/.local/bin/drop-vet` on the server, set
+`defaults write dev.drop-vet.app RemoteCommand <path>`; a forced command ignores this setting.
 
 ## Which one should I use?
 

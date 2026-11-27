@@ -6,9 +6,9 @@
 Mac (drop-vet.app)                      Server (DROP_VET_ROOT)
 ──────────────────                      ──────────────────────
 drop window
-  ssh   mkdir landing/.part-<id>
-  scp   files → landing/.part-<id>/
-  ssh   mv .part-<id> → drop-<id>  ───►  landing/drop-<id>
+  ssh   drop-vet put <id> <path>  (one per file, stdin = bytes)
+  ssh   drop-vet done <id>        ───►  landing/drop-<id>
+        (with a drop-only key, sshd forces every request through `drop-vet ssh-gate`)
                                            │  drop-vet-intake.path (PathChanged)
                                            │  definitions older than N days? → exit 1, notify, wait
                                            ▼
@@ -37,7 +37,8 @@ upload.
 | `intake.py` | Lock, freshness gate, landing → quarantine, placement by verdict, ledger rows, notify, purge |
 | `ledger.py` | SQLite schema and queries |
 | `serve.py` | Read-only history page, JSON API, gated downloads |
-| `cli.py` | `drop-vet intake / purge / serve / init` |
+| `gate.py` | SSH forced command for a drop-only key: honours only `put` and `done`, validates paths, never overwrites |
+| `cli.py` | `drop-vet intake / purge / serve / init / ssh-gate / put / done` |
 | `mac/drop-vet.swift` | AppKit floating drop panel; settings from `defaults`; uploads with `ssh`/`scp` |
 
 ## Decisions
@@ -68,6 +69,11 @@ variable is unset, personal-data files are held.
 **Path unit plus a loop.** `PathChanged=` can coalesce events, and a drop can land while a scan is
 running. The intake keeps taking entries from `landing/` until it is empty, and the daily
 definitions job starts it again after any refresh.
+
+**Uploads as two verbs, not scp.** Modern `scp` speaks SFTP, and an SFTP server can't be confined to
+one directory without a root-owned chroot. Streaming each file into `drop-vet put` lets a forced command
+check every path and refuse everything else, and it works the same with or without a restricted key.
+Paths travel base64url-encoded, so no shell quoting is involved on either end.
 
 **No login on the history page.** It binds to loopback. Authentication belongs to whatever
 publishes it (tailnet, VPN, reverse proxy). Downloads are limited to the `ready` tier so the

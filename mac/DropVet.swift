@@ -1,12 +1,14 @@
 import AppKit
 
 // Settings live in the app's defaults domain, e.g.
-//   defaults write dev.drop-vet.app SSHHost myserver        (an alias from ~/.ssh/config)
-//   defaults write dev.drop-vet.app RemoteRoot drop-vet     (relative to the remote home)
+//   defaults write dev.drop-vet.app SSHHost myserver                    (an alias from ~/.ssh/config)
+//   defaults write dev.drop-vet.app RemoteCommand .local/bin/drop-vet   (drop-vet on the server)
 //   defaults write dev.drop-vet.app HistoryURL https://myserver.example:8750/
 enum Settings {
     static var sshHost: String { UserDefaults.standard.string(forKey: "SSHHost") ?? "drop-vet" }
-    static var remoteRoot: String { UserDefaults.standard.string(forKey: "RemoteRoot") ?? "drop-vet" }
+    static var remoteCommand: String {
+        UserDefaults.standard.string(forKey: "RemoteCommand") ?? ".local/bin/drop-vet"
+    }
     static var historyURL: URL? { UserDefaults.standard.string(forKey: "HistoryURL").flatMap(URL.init(string:)) }
 }
 
@@ -77,22 +79,28 @@ final class DropView: NSView {
         busy += 1
         label.stringValue = "Sending \(urls.count)…"
         DispatchQueue.global().async {
-            // Upload into a dot-dir the intake ignores, then rename it into landing/ so the
-            // intake only ever sees complete drops.
+            // Each file is streamed with `drop-vet put <id> <base64url path>`, then `drop-vet done <id>`
+            // renames the upload into landing/. These two requests are all a drop-only key may make
+            // (see `drop-vet ssh-gate`). Paths travel base64url-encoded, so no shell quoting is involved,
+            // and settings arrive as environment variables, never spliced into the script text.
             let id = "\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(6))"
-            // Host and root arrive as environment variables, never spliced into the script text.
             let script = """
             set -e
-            o="-o BatchMode=yes -o ConnectTimeout=10"
-            ssh $o "$DG_HOST" "mkdir -p '$DG_ROOT/landing/.part-$DG_ID'"
-            scp -rq $o "$@" "$DG_HOST:$DG_ROOT/landing/.part-$DG_ID/"
-            ssh $o "$DG_HOST" "mv '$DG_ROOT/landing/.part-$DG_ID' '$DG_ROOT/landing/drop-$DG_ID'"
+            o="-o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto -o ControlPath=$HOME/.ssh/dv-%C -o ControlPersist=15"
+            for src in "$@"; do
+              base=$(dirname "$src")
+              find "$src" -type f | while IFS= read -r f; do
+                enc=$(printf %s "${f#"$base"/}" | base64 | tr -d '\\n=' | tr '+/' '-_')
+                ssh $o "$DG_HOST" "$DG_CMD put $DG_ID $enc" < "$f" || exit 1
+              done
+            done
+            ssh $o "$DG_HOST" "$DG_CMD done $DG_ID"
             """
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/sh")
             p.arguments = ["-c", script, "sh"] + urls.map(\.path)
             p.environment = ProcessInfo.processInfo.environment.merging(
-                ["DG_HOST": Settings.sshHost, "DG_ROOT": Settings.remoteRoot, "DG_ID": id]) { $1 }
+                ["DG_HOST": Settings.sshHost, "DG_CMD": Settings.remoteCommand, "DG_ID": id]) { $1 }
             let ok = (try? p.run()) != nil && { p.waitUntilExit(); return p.terminationStatus == 0 }()
             DispatchQueue.main.async {
                 self.busy -= 1
