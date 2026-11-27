@@ -1,3 +1,5 @@
+<img src="mac/icon.png" alt="" width="96" align="right">
+
 # drop-vet
 
 Drag a file onto a small window on your Mac. A Linux box you own quarantines it, scans it in a
@@ -54,7 +56,7 @@ defaults write dev.drop-vet.app SSHHost myserver
 defaults write dev.drop-vet.app HistoryURL https://myserver.example:8750/
 ```
 
-Drop a file on the window. It says "Sent ✓", and a few seconds later the history page shows the
+`build.sh` turns `mac/icon.png` into the app icon. Drop a file on the window. It says "Sent ✓", and a few seconds later the history page shows the
 verdict. Double-click or right-click the window (or press ⌘L) to open the history page.
 
 Without a Mac, anything that can `scp` a directory into `landing/.part-<id>/` and then rename it to
